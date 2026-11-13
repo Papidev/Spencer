@@ -1,0 +1,11 @@
+{
+  "name": "@spencer/api",
+  "private": true,
+  "scripts": {
+    "dev": "uv run alembic upgrade head && uv run uvicorn spencer.main:app --reload --host 127.0.0.1 --port 8000",
+    "test": "uv run pytest",
+    "check": "uv run mypy src",
+    "lint": "uv run ruff check .",
+    "db:migrate": "uv run alembic upgrade head"
+  }
+}

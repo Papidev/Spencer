@@ -1,0 +1,17 @@
+{
+  "$schema": "https://turborepo.dev/schema.json",
+  "globalPassThroughEnv": [
+    "UV_CACHE_DIR",
+    "UV_PYTHON_INSTALL_DIR",
+    "SPENCER_DATA_DIR",
+    "SPENCER_TEST_RECEIPTS"
+  ],
+  "tasks": {
+    "dev": { "cache": false, "persistent": true },
+    "build": { "outputs": ["dist/**"] },
+    "test": { "outputs": [], "cache": false },
+    "check": { "outputs": [], "cache": false },
+    "lint": { "outputs": [] },
+    "db:migrate": { "cache": false }
+  }
+}
