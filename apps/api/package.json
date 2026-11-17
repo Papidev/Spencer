@@ -6,6 +6,8 @@
     "test": "uv run pytest",
     "check": "uv run mypy src",
     "lint": "uv run ruff check .",
-    "db:migrate": "uv run alembic upgrade head"
+    "db:migrate": "uv run alembic upgrade head",
+    "search:start": "python3 ../../scripts/search_service.py start",
+    "search:stop": "python3 ../../scripts/search_service.py stop"
   }
 }

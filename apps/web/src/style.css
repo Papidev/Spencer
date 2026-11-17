@@ -1166,3 +1166,126 @@ input::placeholder {
     scroll-behavior: auto !important;
   }
 }
+
+.product-identity {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+}
+.product-identity > span:last-child {
+  min-width: 0;
+}
+.product-identity small {
+  margin-top: 3px;
+}
+.product-image {
+  display: inline-flex;
+  width: 52px;
+  height: 58px;
+  flex: 0 0 52px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: #f5f7f1;
+  color: var(--muted);
+  overflow: hidden;
+}
+.product-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.editor-dialog .product-research {
+  margin: 0 25px 20px;
+}
+.search-progress,
+.product-research {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin: 16px 0;
+}
+.search-progress {
+  justify-content: space-between;
+  color: var(--muted);
+}
+.checkbox-label {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 12px 0;
+}
+
+.products-table {
+  table-layout: fixed;
+  white-space: normal;
+}
+.products-table th,
+.products-table td {
+  padding: 14px 10px;
+  overflow-wrap: anywhere;
+}
+.products-table th:nth-child(2) {
+  width: 16%;
+}
+.products-table th:nth-child(3) {
+  width: 18%;
+}
+.products-table th:nth-child(4) {
+  width: 10%;
+}
+.products-table th:nth-child(5) {
+  width: 14%;
+}
+.products-table th:last-child {
+  width: 50px;
+}
+.products-table .table-button {
+  width: 100%;
+}
+@media (max-width: 680px) {
+  .products-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  .products-table,
+  .products-table tbody {
+    display: block;
+  }
+  .products-table tr {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    padding: 12px;
+    gap: 12px;
+    border-bottom: 1px solid var(--line);
+  }
+  .products-table tr:last-child {
+    border-bottom: 0;
+  }
+  .products-table td {
+    padding: 0;
+    border: 0;
+    min-width: 0;
+    text-align: left;
+  }
+  .products-table td:first-child,
+  .products-table td:last-child {
+    grid-column: 1 / -1;
+  }
+  .products-table td:last-child {
+    justify-self: end;
+  }
+  .products-table td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 4px;
+    color: var(--muted);
+    font-size: 9px;
+    font-weight: 400;
+  }
+}

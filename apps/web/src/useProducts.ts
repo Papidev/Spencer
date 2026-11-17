@@ -6,17 +6,30 @@ export const useProducts = () => {
   const { state, products, purchases } = useSpending();
   const search = ref("");
   const category = ref("all");
+  const knownOnly = ref(false);
   const order = ref("spending");
   const selected = ref<number | null>(null);
+  const selectedProduct = computed(() =>
+    products.value.find((product) => product.id === selected.value),
+  );
+  const comparable = computed(() => selectedProduct.value?.kind === "fixed");
   const rows = computed(() =>
     products.value
       .filter(
         (product) =>
-          product.name
+          [
+            product.name,
+            product.brand ?? "",
+            ...state.value.aliases
+              .filter((alias) => alias.product_id === product.id)
+              .map((alias) => alias.label),
+          ]
+            .join(" ")
             .toLocaleLowerCase("it")
             .includes(search.value.toLocaleLowerCase("it")) &&
           (category.value === "all" ||
-            String(product.category_id) === category.value),
+            String(product.category_id) === category.value) &&
+          (!knownOnly.value || Boolean(product.source_url)),
       )
       .map((product) => {
         const lines = purchases.value.filter(
@@ -100,19 +113,21 @@ export const useProducts = () => {
       axisLabel: { formatter: "{value} €" },
       splitLine: { lineStyle: { color: "#edf0eb" } },
     },
-    series: [
-      {
-        name: "Prezzo pagato",
-        type: "line",
-        symbolSize: 9,
-        lineStyle: { color: "#a7b9a3" },
-        data: history.value.map((entry) => ({
-          value: entry.verified ? entry.net / entry.count / 100 : null,
-          symbol: entry.promotional ? "diamond" : "circle",
-          itemStyle: { color: entry.promotional ? "#c48055" : "#29634f" },
-        })),
-      },
-    ],
+    series: comparable.value
+      ? [
+          {
+            name: "Prezzo pagato",
+            type: "line",
+            symbolSize: 9,
+            lineStyle: { color: "#a7b9a3" },
+            data: history.value.map((entry) => ({
+              value: entry.verified ? entry.net / entry.count / 100 : null,
+              symbol: entry.promotional ? "diamond" : "circle",
+              itemStyle: { color: entry.promotional ? "#c48055" : "#29634f" },
+            })),
+          },
+        ]
+      : [],
   }));
 
   return {
@@ -120,8 +135,11 @@ export const useProducts = () => {
     products,
     search,
     category,
+    knownOnly,
     order,
     selected,
+    selectedProduct,
+    comparable,
     rows,
     history,
     option,

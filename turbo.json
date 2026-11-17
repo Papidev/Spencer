@@ -4,7 +4,12 @@
     "UV_CACHE_DIR",
     "UV_PYTHON_INSTALL_DIR",
     "SPENCER_DATA_DIR",
-    "SPENCER_TEST_RECEIPTS"
+    "SPENCER_TEST_RECEIPTS",
+    "SPENCER_ENRICHMENT_ENABLED",
+    "SPENCER_OLLAMA_MODEL",
+    "SPENCER_OLLAMA_URL",
+    "SPENCER_SEARCH_URL",
+    "SPENCER_SEARCH_SECRET"
   ],
   "tasks": {
     "dev": { "cache": false, "persistent": true },
@@ -12,6 +17,8 @@
     "test": { "outputs": [], "cache": false },
     "check": { "outputs": [], "cache": false },
     "lint": { "outputs": [] },
-    "db:migrate": { "cache": false }
+    "db:migrate": { "cache": false },
+    "search:start": { "cache": false },
+    "search:stop": { "cache": false }
   }
 }

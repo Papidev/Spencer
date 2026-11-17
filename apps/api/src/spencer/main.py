@@ -1,10 +1,14 @@
+import asyncio
 import hashlib
 import json
+import os
 from collections.abc import Iterator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 from typing import Annotated, Any
 
+import httpx
 from fastapi import Depends, FastAPI, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
@@ -12,23 +16,41 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from spencer.categorization import categorize_missing_products
 from spencer.database import (
     CATEGORIES,
     Alias,
     Category,
     Product,
+    ProductKind,
     Purchase,
     Receipt,
     data_directory,
     database_engine,
 )
+from spencer.enrichment import (
+    DETAIL_FIELDS,
+    EnrichmentWorker,
+    ProductResearch,
+    SearchUnavailable,
+    image_media_type,
+    public_url,
+)
 from spencer.parser import ReceiptError, parse_pdf
 
 
 class ProductUpdate(BaseModel):
-    name: str = Field(min_length=1, max_length=160)
+    kind: ProductKind = "unknown"
+    name: str | None = Field(default=None, min_length=1, max_length=160)
     category_id: int | None = None
     reviewed: bool = True
+    brand: str | None = Field(default=None, max_length=160)
+    pack_size: str | None = Field(default=None, max_length=160)
+    image_url: str | None = Field(default=None, max_length=2048)
+
+
+class SearchRequest(BaseModel):
+    replace_manual: bool = False
 
 
 class AliasUpdate(BaseModel):
@@ -39,20 +61,37 @@ class CategoryUpdate(BaseModel):
     name: str = Field(min_length=1, max_length=80)
 
 
-def create_app(directory: Path | None = None) -> FastAPI:
+def create_app(directory: Path | None = None, research: ProductResearch | None = None) -> FastAPI:
     directory = directory or data_directory()
     engine = database_engine(directory)
     pdf_directory = directory / "receipts"
     pdf_directory.mkdir(parents=True, exist_ok=True)
+    worker: EnrichmentWorker | None = None
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> Any:
+        nonlocal worker, research
         with Session(engine) as session:
             if not session.scalar(select(Category.id).limit(1)):
                 session.add_all(Category(name=name) for name in CATEGORIES)
                 session.commit()
-        yield
-        engine.dispose()
+            categorize_missing_products(session)
+            session.commit()
+        task = None
+        research = research or ProductResearch()
+        if os.environ.get("SPENCER_ENRICHMENT_ENABLED", "true").lower() == "true":
+            worker = EnrichmentWorker(engine, research)
+            worker.resume()
+            task = asyncio.create_task(worker.run())
+        try:
+            yield
+        finally:
+            if task and worker:
+                task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await task
+            await research.close()
+            engine.dispose()
 
     app = FastAPI(title="Spencer", lifespan=lifespan)
 
@@ -100,6 +139,15 @@ def create_app(directory: Path | None = None) -> FastAPI:
                     "name": product.name,
                     "category_id": product.category_id,
                     "reviewed": product.reviewed,
+                    "brand": product.brand,
+                    "pack_size": product.pack_size,
+                    "kind": product.kind,
+                    "image_url": product.image_url,
+                    "source_url": product.source_url,
+                    "confirmation": product.confirmation,
+                    "manual_fields": json.loads(product.manual_fields),
+                    "search_status": product.search_status,
+                    "search_error": product.search_error,
                 }
                 for product in session.scalars(select(Product)).all()
             ],
@@ -189,6 +237,8 @@ def create_app(directory: Path | None = None) -> FastAPI:
                     discount_label=line.discount_label,
                 )
             )
+        session.flush()
+        categorize_missing_products(session)
         try:
             # Atomic replacement also makes a reimport after a failed commit safe.
             (pdf_directory / f"{digest}.pdf").write_bytes(content)
@@ -230,13 +280,104 @@ def create_app(directory: Path | None = None) -> FastAPI:
             raise HTTPException(404, "Prodotto non trovato.")
         if update.category_id is not None and session.get(Category, update.category_id) is None:
             raise HTTPException(422, "Categoria non valida.")
-        if not update.name.strip():
+        if "name" in update.model_fields_set and (update.name is None or not update.name.strip()):
             raise HTTPException(422, "Inserisci un nome.")
-        product.name = update.name.strip()
-        product.category_id = update.category_id
         product.reviewed = update.reviewed
+        protected = set(json.loads(product.manual_fields))
+        for field in DETAIL_FIELDS:
+            if field not in update.model_fields_set:
+                continue
+            value = getattr(update, field)
+            if field == "image_url" and value and not public_url(value):
+                raise HTTPException(422, "Inserisci un URL pubblico http o https per l’immagine.")
+            setattr(product, field, value if field == "category_id" else (value or "").strip())
+            protected.add(field)
+        product.manual_fields = json.dumps(sorted(protected))
+        product.confirmation = "manual" if update.reviewed else ""
         session.commit()
         return {"updated": True}
+
+    @app.post("/api/products/search")
+    def search_existing(session: Database) -> dict[str, int]:
+        count = 0
+        for product in session.scalars(
+            select(Product).where(
+                Product.search_status.in_(("idle", "failed")),
+                Product.id.in_(
+                    select(Alias.product_id).join(Purchase, Purchase.alias_id == Alias.id)
+                ),
+            )
+        ):
+            product.search_status = "pending"
+            product.search_attempts = 0
+            product.search_after = 0
+            product.search_error = ""
+            product.search_revision += 1
+            count += 1
+        session.commit()
+        return {"queued": count}
+
+    @app.get("/api/products/{product_id}/image")
+    async def product_image(product_id: int, session: Database) -> FileResponse:
+        product = session.get(Product, product_id)
+        if product is None or not product.image_url:
+            raise HTTPException(404, "Immagine non disponibile.")
+        cache_directory = directory / "product-images"
+        cache = cache_directory / hashlib.sha256(product.image_url.encode()).hexdigest()
+        if not cache.exists():
+            assert research is not None
+            try:
+                downloaded = await research.image(product.image_url)
+            except (httpx.HTTPError, OSError, ValueError) as error:
+                raise HTTPException(404, "Immagine non disponibile.") from error
+            if downloaded is None:
+                raise HTTPException(404, "Immagine non disponibile.")
+            cache_directory.mkdir(parents=True, exist_ok=True)
+            with NamedTemporaryFile(dir=cache_directory, delete=False) as temporary:
+                temporary.write(downloaded[0])
+            Path(temporary.name).replace(cache)
+        with cache.open("rb") as cached:
+            media_type = image_media_type(cached.read(12))
+        if media_type is None:
+            raise HTTPException(404, "Immagine non disponibile.")
+        verdict = cache.with_suffix(".packaged-v1")
+        packaged = verdict.read_text() if verdict.exists() else ""
+        if packaged not in ("yes", "no"):
+            assert research is not None
+            try:
+                packaged = "yes" if await research.packaged_image(cache.read_bytes()) else "no"
+            except (httpx.HTTPError, ValueError, KeyError, TypeError, SearchUnavailable) as error:
+                raise HTTPException(404, "Confezione del prodotto non verificabile.") from error
+            with NamedTemporaryFile(dir=cache_directory, delete=False) as temporary:
+                temporary.write(packaged.encode())
+            Path(temporary.name).replace(verdict)
+        if packaged != "yes":
+            raise HTTPException(404, "Nessuna confezione di vendita visibile nella foto.")
+        return FileResponse(
+            cache,
+            media_type=media_type,
+            headers={
+                "Cache-Control": "private, max-age=86400",
+                "X-Content-Type-Options": "nosniff",
+            },
+        )
+
+    @app.post("/api/products/{product_id}/search")
+    def search_product(
+        product_id: int, request: SearchRequest, session: Database
+    ) -> dict[str, bool]:
+        product = session.get(Product, product_id)
+        if product is None:
+            raise HTTPException(404, "Prodotto non trovato.")
+        if request.replace_manual:
+            product.manual_fields = "[]"
+        product.search_status = "pending"
+        product.search_attempts = 0
+        product.search_error = ""
+        product.search_after = 0
+        product.search_revision += 1
+        session.commit()
+        return {"queued": True}
 
     @app.patch("/api/aliases/{alias_id}")
     def move_alias(alias_id: int, update: AliasUpdate, session: Database) -> dict[str, int]:

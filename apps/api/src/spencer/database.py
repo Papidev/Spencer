@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+from typing import Literal
 
 from sqlalchemy import ForeignKey, UniqueConstraint, create_engine, event
 from sqlalchemy.engine import Engine
@@ -16,12 +17,27 @@ class Category(Base):
     name: Mapped[str] = mapped_column(unique=True)
 
 
+ProductKind = Literal["unknown", "fixed", "variable_weight"]
+
+
 class Product(Base):
     __tablename__ = "products"
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str]
     category_id: Mapped[int | None] = mapped_column(ForeignKey("categories.id"))
     reviewed: Mapped[bool] = mapped_column(default=False)
+    brand: Mapped[str] = mapped_column(default="")
+    pack_size: Mapped[str] = mapped_column(default="")
+    kind: Mapped[str] = mapped_column(default="unknown")
+    image_url: Mapped[str] = mapped_column(default="")
+    source_url: Mapped[str] = mapped_column(default="")
+    confirmation: Mapped[str] = mapped_column(default="")
+    manual_fields: Mapped[str] = mapped_column(default="[]")
+    search_status: Mapped[str] = mapped_column(default="pending")
+    search_attempts: Mapped[int] = mapped_column(default=0)
+    search_error: Mapped[str] = mapped_column(default="")
+    search_after: Mapped[float] = mapped_column(default=0)
+    search_revision: Mapped[int] = mapped_column(default=0)
 
 
 class Alias(Base):

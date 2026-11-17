@@ -6,20 +6,26 @@ import { dateLabel, money } from "../api";
 import { useProducts } from "../useProducts";
 import ProductEditor from "../components/ProductEditor.vue";
 import Chart from "../components/Chart.vue";
+import ProductIdentity from "../components/ProductIdentity.vue";
+import { productSearchLabel, useProductSearch } from "../useProductSearch";
 
 const {
   state,
   products,
   search,
   category,
+  knownOnly,
   order,
   selected,
+  selectedProduct,
+  comparable,
   rows,
   history,
   option,
 } = useProducts();
 const route = useRoute();
 const editing = ref<number | null>(null);
+const { waiting, available, unidentified, search: searchDetails, busy } = useProductSearch();
 watch(
   () => route.query.prodotto,
   (value) => {
@@ -35,6 +41,17 @@ watch(
       <h1>Prodotti</h1>
     </div>
     <span class="tag">{{ products.length }} prodotti</span>
+  </div>
+  <div class="search-progress" role="status">
+    <p v-if="waiting">Ricerca dettagli: {{ waiting }} {{ waiting === 1 ? 'prodotto in lavorazione' : 'prodotti in lavorazione' }}. Puoi continuare a usare Spencer.</p>
+    <p v-else>Nome, foto e formato cercati sul web con IA locale.</p>
+    <p v-if="unidentified">
+      {{ unidentified }} {{ unidentified === 1 ? "prodotto non identificato" : "prodotti non identificati" }}.
+      Puoi correggere i dettagli con il pulsante Modifica o riprovare la ricerca dal singolo prodotto.
+    </p>
+    <button v-if="available" class="button small" :disabled="busy" @click="searchDetails">
+      Cerca dettagli per {{ available }} prodotti
+    </button>
   </div>
   <div class="filters">
     <label class="search-field"
@@ -57,21 +74,31 @@ watch(
       <option value="visits">Più ricorrenti</option>
     </select>
   </div>
+  <label class="checkbox-label">
+    <input v-model="knownOnly" type="checkbox" />Solo prodotti conosciuti dall’IA
+  </label>
   <section v-if="selected && history.length" class="panel product-history">
     <div class="panel-heading">
       <div>
-        <h2>{{ products.find((product) => product.id === selected)?.name }}</h2>
+        <h2>{{ selectedProduct?.name }}</h2>
       </div>
       <button class="text-button" @click="selected = null">Chiudi</button>
     </div>
     <Chart
+      v-if="comparable"
       :option="option"
       label="Prezzi pagati: acquisti a prezzo pieno e in promozione"
     />
-    <p class="panel-footnote">
+    <p v-if="comparable" class="panel-footnote">
       Prezzo medio per riga, esclusi buoni e benefici sullo scontrino. “Prezzo
       pieno” indica che non è riportato uno sconto sul prodotto. Verifica che
       formato e quantità siano gli stessi; non è un confronto al kg o al litro.
+    </p>
+    <p v-else class="panel-footnote">
+      {{ selectedProduct?.kind === "variable_weight"
+        ? "Prodotto a peso variabile: le confezioni possono avere quantità diverse. La spesa degli acquisti non è un confronto dei prezzi."
+        : "Tipo di prodotto da determinare: il confronto dei prezzi sarà disponibile dopo la conferma di un formato fisso." }}
+      Importi esclusi buoni e benefici sullo scontrino.
     </p>
     <div class="table-wrap">
       <table aria-label="Storico acquisti del prodotto">
@@ -80,7 +107,7 @@ watch(
             <th>Data</th>
             <th>Acquisto</th>
             <th>Righe</th>
-            <th class="align-right">Prezzo pagato per riga</th>
+            <th class="align-right">{{ comparable ? "Prezzo pagato per riga" : "Spesa acquisti" }}</th>
           </tr>
         </thead>
         <tbody>
@@ -99,9 +126,9 @@ watch(
             <td class="align-right number">
               <template v-if="entry.verified"
                 ><del v-if="entry.promotional" class="original-price">{{
-                  money(entry.gross / entry.count)
+                  money(comparable ? entry.gross / entry.count : entry.gross)
                 }}</del
-                >{{ money(entry.net / entry.count) }}</template
+                >{{ money(comparable ? entry.net / entry.count : entry.net) }}</template
               ><span v-else>Da verificare</span>
             </td>
           </tr>
@@ -111,11 +138,12 @@ watch(
   </section>
   <section class="panel">
     <div class="table-wrap">
-      <table>
+      <table class="products-table" aria-label="Prodotti">
         <thead>
           <tr>
             <th>Prodotto</th>
             <th>Categoria</th>
+            <th>Tipo</th>
             <th>Visite con acquisto</th>
             <th class="align-right">Spesa totale</th>
             <th></th>
@@ -125,19 +153,20 @@ watch(
           <tr v-for="product in rows" :key="product.id">
             <td>
               <button class="table-button" @click="selected = product.id">
-                <strong>{{ product.name }}</strong><small>{{
-                  product.reviewed ? "Descrizione confermata" : "Da rivedere"
-                }}</small>
+                <ProductIdentity :product="product" :original="state.aliases.filter((alias) => alias.product_id === product.id).map((alias) => alias.label).join(' · ')" />
+                <small>{{ productSearchLabel(product) }}</small>
               </button>
+              <small v-if="product.search_error" class="text-error">{{ product.search_error }}</small>
             </td>
-            <td>
+            <td data-label="Categoria">
               {{
                 state.categories.find((item) => item.id === product.category_id)
                   ?.name ?? "Non categorizzato"
               }}
             </td>
-            <td>{{ product.visits }}</td>
-            <td class="align-right number">{{ money(product.amount) }}</td>
+            <td data-label="Tipo">{{ product.kind === "fixed" ? "Formato fisso" : product.kind === "variable_weight" ? "Peso variabile / sfuso" : "Da determinare" }}</td>
+            <td data-label="Visite con acquisto">{{ product.visits }}</td>
+            <td class="align-right number" data-label="Spesa totale">{{ money(product.amount) }}</td>
             <td>
               <button
                 class="icon-button"
@@ -157,7 +186,7 @@ watch(
       <p>
         {{
           products.length
-            ? "Prova un altro nome o una categoria diversa."
+            ? "Prova un altro nome o modifica i filtri."
             : "I prodotti compariranno dopo il primo scontrino."
         }}
       </p>

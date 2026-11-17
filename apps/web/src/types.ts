@@ -4,6 +4,22 @@ export type Product = {
   name: string;
   category_id: number | null;
   reviewed: boolean;
+  brand?: string;
+  pack_size?: string;
+  kind?: "unknown" | "fixed" | "variable_weight";
+  image_url?: string;
+  source_url?: string;
+  confirmation?: "" | "automatic" | "manual";
+  manual_fields?: string[];
+  search_status?:
+    | "idle"
+    | "pending"
+    | "running"
+    | "retry"
+    | "failed"
+    | "not_found"
+    | "matched";
+  search_error?: string;
 };
 export type Alias = {
   id: number;
