@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted } from "vue";
+import { onMounted, onUnmounted } from "vue";
 import {
   LayoutDashboard,
   ReceiptText,
@@ -9,8 +9,19 @@ import {
 } from "lucide-vue-next";
 import { useSpending } from "./store";
 
-const { reload, pending, error, notice, loading } = useSpending();
+const { products, reload, pending, error, notice, loading } = useSpending();
 onMounted(reload);
+const polling = setInterval(() => {
+  if (
+    products.value.some((product) =>
+      ["pending", "running", "retry"].includes(product.search_status ?? "") ||
+      (product.category_id === null &&
+        !product.manual_fields?.includes("category_id") &&
+        ["pending", "running", "retry"].includes(product.category_status ?? "")),
+    )
+  ) void reload();
+}, 4000);
+onUnmounted(() => clearInterval(polling));
 </script>
 
 <template>

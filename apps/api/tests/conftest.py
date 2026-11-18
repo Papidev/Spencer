@@ -51,6 +51,7 @@ def receipt_pdf() -> bytes:
 @pytest.fixture
 def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
     monkeypatch.setenv("SPENCER_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("SPENCER_ENRICHMENT_ENABLED", "false")
     config = Config(str(Path(__file__).parents[1] / "alembic.ini"))
     command.upgrade(config, "head")
     with TestClient(create_app(tmp_path)) as client:

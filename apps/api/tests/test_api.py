@@ -72,7 +72,9 @@ def test_review_applies_to_history_and_future_imports(
     )
     state = client.get("/api/state").json()
     assert len(state["products"]) == 3
-    assert state["products"][0] == {
+    assert {
+        key: state["products"][0][key] for key in ("id", "name", "category_id", "reviewed")
+    } == {
         "id": product_id,
         "name": "Latte",
         "category_id": category_id,
@@ -135,3 +137,26 @@ def test_oversized_upload_is_rejected(client: TestClient) -> None:
         ).status_code
         == 413
     )
+
+
+def test_product_kind_is_validated_persisted_and_reused(
+    client: TestClient, receipt_pdf: bytes, tmp_path: Path
+) -> None:
+    client.post("/api/receipts", files={"file": ("test.pdf", receipt_pdf)})
+    before = client.get("/api/state").json()
+    assert all(product["kind"] == "unknown" for product in before["products"])
+    for invalid in ("packaged", "", None):
+        assert client.patch("/api/products/1", json={"kind": invalid}).status_code == 422
+    for kind in ("fixed", "unknown", "variable_weight"):
+        assert client.patch("/api/products/1", json={"kind": kind}).status_code == 200
+        assert client.get("/api/state").json()["products"][0]["kind"] == kind
+    client.post(
+        "/api/receipts",
+        files={"file": ("new.pdf", pdf_bytes(receipt_text("LATTE TEST 1L *a 7,00", document="0002-0001")))},
+    )
+    with TestClient(create_app(tmp_path)) as restarted:
+        state = restarted.get("/api/state").json()
+        assert state["products"][0]["kind"] == "variable_weight"
+        assert "kind" in state["products"][0]["manual_fields"]
+        assert len(state["products"]) == len(before["products"])
+        assert state["purchases"][:4] == before["purchases"]

@@ -10,6 +10,7 @@ import {
 import ImportReceipts from "../components/ImportReceipts.vue";
 import { useSpending } from "../store";
 import { dateLabel, money } from "../api";
+import ProductIdentity from "../components/ProductIdentity.vue";
 
 const { state, purchases, mutate, busy } = useSpending();
 const selected = ref<number | null>(null);
@@ -177,12 +178,8 @@ const receiptLines = computed(() =>
         <tbody>
           <tr v-for="line in receiptLines" :key="line.id">
             <td>
-              <strong>{{ line.label }}</strong><small
-                >{{ line.product.name
-                }}<template v-if="line.discount_label">
-                  · {{ line.discount_label }}</template
-                ></small
-              >
+              <ProductIdentity :product="line.product" :original="line.label" />
+              <small v-if="line.discount_label">{{ line.discount_label }}</small>
             </td>
             <td class="align-right">{{ money(line.gross_cents) }}</td>
             <td class="align-right">
