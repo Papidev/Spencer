@@ -1,64 +1,87 @@
-"""Conservative category hints from the original receipt descriptions."""
+"""Independent, durable category classification using the local model."""
 
 import json
-import re
+import logging
+import time
+from typing import Protocol
 
 from sqlalchemy import select
+from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
-from spencer.database import Alias, Category, Product
+from spencer.database import Alias, Category, Product, Purchase
 
-# Match whole product words (including common receipt abbreviations), not brand names.
-CATEGORY_PATTERNS = (
-    ("Latticini e uova", r"latte|yogurt|burro|mozzarella|ricotta|gorgonzola|uova|formaggio"),
-    ("Pane e prodotti da forno", r"pane|focaccia|focaccine|focacc|pizza|pizzette|grissini|taralli"),
-    ("Pasta, riso e cereali", r"pasta|riso|tortelloni|tortellini|gnocchi|spaghetti|penne"),
-    ("Carne", r"pollo|tacchino|suino|manzo|vitello"),
-    ("Pesce", r"platessa|salmone|merluzzo|sgombro|tonno|orata|branzino"),
-    ("Salumi", r"prosciutto|salame|mortadella|speck|pancetta|bresaola"),
-    ("Frutta e verdura", r"banane|arance|mele|pere|limoni|cetrioli|cipolline|melanzane|patate|pomodoro|pomodorino|pomodorini|lattuga|radicchio|uva|susine|carote"),
-    ("Dolci e snack", r"biscotti|cioccolato|ghiaccioli|croissant"),
-    ("Bevande", r"acqua|aranciata|succo"),
-    ("Alcolici", r"birra|vino|gin|vodka|whisky"),
-)
+logger = logging.getLogger(__name__)
 
 
-def receipt_category(labels: list[str], categories: dict[int, str]) -> int | None:
-    matches = set()
-    for label in labels:
-        # These uses of "latte" do not establish a dairy product.
-        if re.search(r"\blatte\b", label, re.IGNORECASE) and re.search(
-            r"\b(mandorla|soia|avena|riso|cocco|vegetale|corpo|doccia|detergente)\b",
-            label,
-            re.IGNORECASE,
-        ):
-            return None
-        candidates = [
-            (match.start(), category)
-            for category, words in CATEGORY_PATTERNS
-            if (match := re.search(rf"\b(?:{words})\b", label, re.IGNORECASE))
-        ]
-        if candidates:
-            # The main product usually precedes its ingredients: focaccia con pomodorini.
-            position, category = min(candidates)
-            if re.search(
-                r"\b(burger|contorno|crocchette|sugo|ragù|ragu|torta|latte|crema)\b",
-                label[:position],
-                re.IGNORECASE,
-            ):
-                return None
-            matches.add(category)
-    if len(matches) != 1:
-        return None
-    return next((key for key, name in categories.items() if name in matches), None)
+class CategoryResearch(Protocol):
+    async def classify_category(
+        self, labels: list[str], categories: dict[int, str]
+    ) -> int | None: ...
 
 
-def categorize_missing_products(session: Session) -> None:
-    categories = {category.id: category.name for category in session.scalars(select(Category))}
-    for product in session.scalars(select(Product).where(Product.category_id.is_(None))):
-        if "category_id" in json.loads(product.manual_fields):
-            continue
-        product.category_id = receipt_category(
-            list(session.scalars(select(Alias.label).where(Alias.product_id == product.id))),
-            categories,
-        )
+class CategoryWorker:
+    def __init__(self, engine: Engine, research: CategoryResearch) -> None:
+        self.engine = engine
+        self.research = research
+
+    def resume(self) -> None:
+        with Session(self.engine) as session:
+            for product in session.scalars(select(Product)):
+                if product.category_id is not None or "category_id" in json.loads(product.manual_fields):
+                    product.category_status = "done"
+                elif product.category_status in ("running", "retry", "failed"):
+                    product.category_status = "pending"
+                    product.category_attempts = 0
+                    product.category_after = 0
+            session.commit()
+
+    async def run_once(self) -> bool:
+        with Session(self.engine) as session:
+            product = session.scalar(
+                select(Product)
+                .where(
+                    Product.category_id.is_(None),
+                    ~Product.manual_fields.contains('"category_id"'),
+                    Product.category_status.in_(("pending", "retry")),
+                    Product.category_after <= time.time(),
+                    Product.id.in_(
+                        select(Alias.product_id).join(Purchase, Purchase.alias_id == Alias.id)
+                    ),
+                )
+                .order_by(Product.id)
+                .limit(1)
+            )
+            if product is None:
+                return False
+            product.category_status = "running"
+            product.category_attempts += 1
+            product_id, revision = product.id, product.search_revision
+            labels = list(session.scalars(select(Alias.label).where(Alias.product_id == product.id)))
+            categories = {c.id: c.name for c in session.scalars(select(Category))}
+            session.commit()
+        category_id = None
+        failed = False
+        try:
+            category_id = await self.research.classify_category(labels, categories)
+        except Exception:
+            logger.warning("Category classification failed for product %s", product_id, exc_info=False)
+            failed = True
+        with Session(self.engine) as session:
+            session.connection().exec_driver_sql("BEGIN IMMEDIATE")
+            product = session.get(Product, product_id)
+            if product is None or product.search_revision != revision:
+                return True
+            if product.category_id is not None or "category_id" in json.loads(product.manual_fields):
+                product.category_status = "done"
+            elif failed:
+                product.category_status = "retry" if product.category_attempts < 3 else "failed"
+                product.category_after = time.time() + 60 * product.category_attempts
+            else:
+                # Categories can be deleted or edited while the model is running.
+                if category_id is not None and session.get(Category, category_id) is None:
+                    category_id = None
+                product.category_id = category_id
+                product.category_status = "done" if category_id is not None else "not_found"
+            session.commit()
+        return True

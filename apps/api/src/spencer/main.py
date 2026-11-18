@@ -16,7 +16,6 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from spencer.categorization import categorize_missing_products
 from spencer.database import (
     CATEGORIES,
     Alias,
@@ -75,8 +74,6 @@ def create_app(directory: Path | None = None, research: ProductResearch | None =
             if not session.scalar(select(Category.id).limit(1)):
                 session.add_all(Category(name=name) for name in CATEGORIES)
                 session.commit()
-            categorize_missing_products(session)
-            session.commit()
         task = None
         research = research or ProductResearch()
         if os.environ.get("SPENCER_ENRICHMENT_ENABLED", "true").lower() == "true":
@@ -138,6 +135,7 @@ def create_app(directory: Path | None = None, research: ProductResearch | None =
                     "id": product.id,
                     "name": product.name,
                     "category_id": product.category_id,
+                    "category_status": product.category_status,
                     "reviewed": product.reviewed,
                     "brand": product.brand,
                     "pack_size": product.pack_size,
@@ -237,8 +235,6 @@ def create_app(directory: Path | None = None, research: ProductResearch | None =
                     discount_label=line.discount_label,
                 )
             )
-        session.flush()
-        categorize_missing_products(session)
         try:
             # Atomic replacement also makes a reimport after a failed commit safe.
             (pdf_directory / f"{digest}.pdf").write_bytes(content)
@@ -308,6 +304,10 @@ def create_app(directory: Path | None = None, research: ProductResearch | None =
                 ),
             )
         ):
+            if product.category_id is None:
+                product.category_status = "pending"
+                product.category_attempts = 0
+                product.category_after = 0
             product.search_status = "pending"
             product.search_attempts = 0
             product.search_after = 0
@@ -371,6 +371,10 @@ def create_app(directory: Path | None = None, research: ProductResearch | None =
             raise HTTPException(404, "Prodotto non trovato.")
         if request.replace_manual:
             product.manual_fields = "[]"
+        if product.category_id is None:
+            product.category_status = "pending"
+            product.category_attempts = 0
+            product.category_after = 0
         product.search_status = "pending"
         product.search_attempts = 0
         product.search_error = ""

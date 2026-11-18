@@ -3,6 +3,7 @@ export type Product = {
   id: number;
   name: string;
   category_id: number | null;
+  category_status?: "pending" | "running" | "retry" | "failed" | "not_found" | "done";
   reviewed: boolean;
   brand?: string;
   pack_size?: string;

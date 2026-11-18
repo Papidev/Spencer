@@ -28,6 +28,13 @@ export const useProductSearch = () => {
       ["pending", "running", "retry"].includes(product.search_status ?? ""),
     ).length,
   );
+  const categorizing = computed(() =>
+    products.value.filter((product) =>
+      product.category_id === null &&
+      !product.manual_fields?.includes("category_id") &&
+      ["pending", "running", "retry"].includes(product.category_status ?? ""),
+    ).length,
+  );
   const available = computed(() =>
     products.value.filter((product) =>
       ["idle", "failed"].includes(product.search_status ?? "idle"),
@@ -40,5 +47,5 @@ export const useProductSearch = () => {
     if (await mutate("/products/search", "POST"))
       notice.value = "Ricerca dei dettagli avviata. Puoi continuare a usare Spencer.";
   };
-  return { waiting, available, unidentified, search, busy };
+  return { waiting, categorizing, available, unidentified, search, busy };
 };

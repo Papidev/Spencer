@@ -25,7 +25,7 @@ const {
 } = useProducts();
 const route = useRoute();
 const editing = ref<number | null>(null);
-const { waiting, available, unidentified, search: searchDetails, busy } = useProductSearch();
+const { waiting, categorizing, available, unidentified, search: searchDetails, busy } = useProductSearch();
 watch(
   () => route.query.prodotto,
   (value) => {
@@ -45,6 +45,7 @@ watch(
   <div class="search-progress" role="status">
     <p v-if="waiting">Ricerca dettagli: {{ waiting }} {{ waiting === 1 ? 'prodotto in lavorazione' : 'prodotti in lavorazione' }}. Puoi continuare a usare Spencer.</p>
     <p v-else>Nome, foto e formato cercati sul web con IA locale.</p>
+    <p v-if="categorizing">Categorie IA: {{ categorizing }} {{ categorizing === 1 ? 'prodotto in lavorazione' : 'prodotti in lavorazione' }}.</p>
     <p v-if="unidentified">
       {{ unidentified }} {{ unidentified === 1 ? "prodotto non identificato" : "prodotti non identificati" }}.
       Puoi correggere i dettagli con il pulsante Modifica o riprovare la ricerca dal singolo prodotto.

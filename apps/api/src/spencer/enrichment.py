@@ -19,6 +19,7 @@ from sqlalchemy import select
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
+from spencer.categorization import CategoryWorker
 from spencer.database import Alias, Category, Product, ProductKind, Purchase
 
 logger = logging.getLogger(__name__)
@@ -39,6 +40,10 @@ class ProductMatch(BaseModel):
     name: str = Field(max_length=160)
     brand: str = Field(max_length=160)
     pack_size: str = Field(max_length=160)
+    category_id: int | None
+
+
+class CategoryChoice(BaseModel):
     category_id: int | None
 
 
@@ -204,6 +209,8 @@ class ProductResearch:
                                     if "candidate" in schema["properties"]
                                     else 'Esempio struttura: {"packaged":false}.'
                                     if "packaged" in schema["properties"]
+                                    else 'Esempio struttura: {"category_id":null}.'
+                                    if "category_id" in schema["properties"]
                                     else 'Esempio struttura: {"query":"parole da cercare"}.'
                                 )
                             ),
@@ -214,6 +221,26 @@ class ProductResearch:
             )
         response.raise_for_status()
         return str(response.json()["message"]["content"])
+
+    async def classify_category(
+        self, labels: list[str], categories: dict[int, str]
+    ) -> int | None:
+        choice = CategoryChoice.model_validate_json(
+            await self.chat(
+                "Assegna una categoria al tipo di prodotto descritto sullo scontrino. "
+                "Non serve identificare marca, variante o formato esatti e non serve una "
+                "corrispondenza sul web. Interpreta abbreviazioni e contesto: considera il "
+                "prodotto nel suo insieme, non un singolo ingrediente. Usa solo una categoria "
+                "dalla lista fornita; restituisci category_id=null se le descrizioni sono "
+                "insufficienti o incompatibili. Non confermare l'identità del prodotto. "
+                f"Descrizioni: {json.dumps(labels, ensure_ascii=False)}\n"
+                f"Categorie disponibili: {json.dumps(categories, ensure_ascii=False)}",
+                CategoryChoice.model_json_schema(),
+            )
+        )
+        if choice.category_id is not None and choice.category_id not in categories:
+            raise ValueError("Categoria restituita dal modello non valida.")
+        return choice.category_id
 
     async def packaged_image(self, content: bytes) -> bool:
         return PackagingCheck.model_validate_json(
@@ -413,8 +440,10 @@ class EnrichmentWorker:
         self.engine = engine
         self.research = research
         self.wake = asyncio.Event()
+        self.categories = CategoryWorker(engine, research)
 
     def resume(self) -> None:
+        self.categories.resume()
         with Session(self.engine) as session:
             for product in session.scalars(
                 select(Product).where(
@@ -479,6 +508,8 @@ class EnrichmentWorker:
                         if field == "category_id" and result[field] is None:
                             continue
                         setattr(product, field, result[field])
+                if product.category_id is not None:
+                    product.category_status = "done"
                 product.source_url = result["source_url"]
                 product.reviewed = True
                 product.confirmation = "manual" if "name" in protected else "automatic"
@@ -490,7 +521,8 @@ class EnrichmentWorker:
         while True:
             self.wake.clear()
             try:
-                worked = await self.run_once()
+                categorized = await self.categories.run_once()
+                worked = await self.run_once() or categorized
             except Exception:
                 # Keep the worker alive after unexpected failures, without logging receipt data.
                 logger.exception("Product worker failed")

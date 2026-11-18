@@ -34,5 +34,8 @@ def test_existing_products_migrate_to_unknown_without_changing_purchases(
         assert connection.exec_driver_sql("SELECT name, kind FROM products").all() == [
             ("Pollo", "unknown")
         ]
+        assert connection.exec_driver_sql(
+            "SELECT category_status, category_attempts, category_after FROM products"
+        ).all() == [("pending", 0, 0)]
         assert connection.exec_driver_sql("SELECT gross_cents FROM purchases").scalar() == 500
     engine.dispose()

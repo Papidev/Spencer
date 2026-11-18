@@ -25,6 +25,9 @@ class Product(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str]
     category_id: Mapped[int | None] = mapped_column(ForeignKey("categories.id"))
+    category_status: Mapped[str] = mapped_column(default="pending")
+    category_attempts: Mapped[int] = mapped_column(default=0)
+    category_after: Mapped[float] = mapped_column(default=0)
     reviewed: Mapped[bool] = mapped_column(default=False)
     brand: Mapped[str] = mapped_column(default="")
     pack_size: Mapped[str] = mapped_column(default="")

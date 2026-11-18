@@ -337,7 +337,11 @@ def test_match_without_category_preserves_receipt_category(
     client.post("/api/receipts", files={"file": ("test.pdf", receipt_pdf)})
     state = client.get("/api/state").json()
     dairy = next(c["id"] for c in state["categories"] if c["name"] == "Latticini e uova")
-    assert state["products"][0]["category_id"] == dairy
+    with Session(database_engine(tmp_path)) as session:
+        product = session.get(Product, state["products"][0]["id"])
+        assert product is not None
+        product.category_id = dairy
+        session.commit()
     engine = database_engine(tmp_path)
     assert asyncio.run(EnrichmentWorker(engine, research_client(category_id=None)).run_once())
     product = client.get("/api/state").json()["products"][0]

@@ -45,7 +45,7 @@ test("unidentified products offer correction without a collective retry", async 
   server.use(http.get("*/api/state", () => HttpResponse.json({
     receipts: [{ id: 1, date: "2026-11-08", status: "imported" }],
     categories: [],
-    products: [{ id: 1, name: "POLLO", category_id: null, reviewed: false, search_status: "not_found" }],
+    products: [{ id: 1, name: "POLLO", category_id: null, reviewed: false, search_status: "not_found", category_status: "pending" }],
     aliases: [{ id: 1, label: "POLLO", product_id: 1 }],
     purchases: [{ id: 1, receipt_id: 1, alias_id: 1, gross_cents: 400, discount_cents: 0, price_verified: true }],
   })));
@@ -58,6 +58,7 @@ test("unidentified products offer correction without a collective retry", async 
   await router.isReady();
   render(Products, { global: { plugins: [router] } });
   expect(screen.getByText(/1 prodotto non identificato/)).toBeInTheDocument();
+  expect(screen.getByText(/Categorie IA: 1 prodotto in lavorazione/)).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Modifica POLLO" })).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: /Cerca dettagli per/ })).not.toBeInTheDocument();
 });

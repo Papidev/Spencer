@@ -14,6 +14,7 @@ Stato: disegno confermato dall’utente e implementato localmente.
 - Quando non emerge un risultato utilizzabile, conservare la descrizione originale e lasciare vuota l’immagine; non inventare dettagli mancanti.
 - Le correzioni manuali prevalgono sui risultati automatici successivi, salvo richiesta esplicita di nuova ricerca.
 - Dopo ogni importazione, avviare la ricerca per i prodotti nuovi in background senza bloccare l’uso dell’app. Offrire un comando anche per i prodotti già presenti.
+- La categorizzazione indipendente usa Ollama locale sulle descrizioni originali, senza regole su parole chiave né ricerca web. Può assegnare una categoria anche ai prodotti non identificati, senza confermarne l’identità. Elabora in background i prodotti senza categoria e protegge le scelte manuali.
 - Recuperare nome, marca, formato, foto e fonte; assegnare una categoria tra quelle esistenti, preservando i campi corretti manualmente.
 - Tra più candidati compatibili, Ollama sceglie il più plausibile e Spencer lo conferma automaticamente. Conservare la fonte consultabile e lasciare vuoti i dettagli non supportati.
 - Se Ollama o la fonte online non sono disponibili, mantenere i prodotti in attesa e riprovare al successivo avvio di Spencer. Offrire anche un pulsante per riprovare subito.
