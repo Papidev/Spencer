@@ -16,6 +16,8 @@ const {
   category,
   knownOnly,
   order,
+  sortColumns,
+  sortBy,
   selected,
   selectedProduct,
   comparable,
@@ -72,7 +74,15 @@ watch(
       </option></select
     ><select v-model="order" aria-label="Ordina prodotti">
       <option value="spending">Spesa maggiore</option>
+      <option value="spending-asc">Spesa minore</option>
       <option value="visits">Più ricorrenti</option>
+      <option value="visits-asc">Meno ricorrenti</option>
+      <option value="name-asc">Prodotto: A–Z</option>
+      <option value="name">Prodotto: Z–A</option>
+      <option value="category-asc">Categoria: A–Z</option>
+      <option value="category">Categoria: Z–A</option>
+      <option value="kind-asc">Tipo: A–Z</option>
+      <option value="kind">Tipo: Z–A</option>
     </select>
   </div>
   <label class="checkbox-label">
@@ -142,11 +152,17 @@ watch(
       <table class="products-table" aria-label="Prodotti">
         <thead>
           <tr>
-            <th>Prodotto</th>
-            <th>Categoria</th>
-            <th>Tipo</th>
-            <th>Visite con acquisto</th>
-            <th class="align-right">Spesa totale</th>
+            <th
+              v-for="column in sortColumns"
+              :key="column.key"
+              :class="{ 'align-right': column.key === 'spending' }"
+              :aria-sort="order === `${column.key}-asc` ? 'ascending' : order === column.key ? 'descending' : 'none'"
+            >
+              <button class="sort-button" @click="sortBy(column.key)">
+                {{ column.label }}
+                <span aria-hidden="true">{{ order === `${column.key}-asc` ? '↑' : order === column.key ? '↓' : '↕' }}</span>
+              </button>
+            </th>
             <th></th>
           </tr>
         </thead>
