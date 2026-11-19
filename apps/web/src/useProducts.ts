@@ -8,6 +8,16 @@ export const useProducts = () => {
   const category = ref("all");
   const knownOnly = ref(false);
   const order = ref("spending");
+  const sortColumns = [
+    { key: "name", label: "Prodotto" },
+    { key: "category", label: "Categoria" },
+    { key: "kind", label: "Tipo" },
+    { key: "visits", label: "Visite con acquisto" },
+    { key: "spending", label: "Spesa totale" },
+  ] as const;
+  const sortBy = (key: string) => {
+    order.value = order.value === `${key}-asc` ? key : `${key}-asc`;
+  };
   const selected = ref<number | null>(null);
   const selectedProduct = computed(() =>
     products.value.find((product) => product.id === selected.value),
@@ -44,11 +54,30 @@ export const useProducts = () => {
           ),
         };
       })
-      .sort((a, b) =>
-        order.value === "visits"
-          ? b.visits - a.visits || b.amount - a.amount
-          : b.amount - a.amount,
-      ),
+      .sort((a, b) => {
+        const ascending = order.value.endsWith("-asc");
+        const key = order.value.replace(/-asc$/, "");
+        let comparison = 0;
+        if (key === "name") {
+          comparison = a.name.localeCompare(b.name, "it", { sensitivity: "base" });
+        } else if (key === "category") {
+          comparison = (
+            state.value.categories.find((item) => item.id === a.category_id)?.name ?? "Non categorizzato"
+          ).localeCompare(
+            state.value.categories.find((item) => item.id === b.category_id)?.name ?? "Non categorizzato",
+            "it",
+            { sensitivity: "base" },
+          );
+        } else if (key === "kind") {
+          const labels = { fixed: "Formato fisso", variable_weight: "Peso variabile / sfuso", unknown: "Da determinare" };
+          comparison = labels[a.kind ?? "unknown"].localeCompare(labels[b.kind ?? "unknown"], "it");
+        } else if (key === "visits") {
+          comparison = a.visits - b.visits || a.amount - b.amount;
+        } else {
+          comparison = a.amount - b.amount;
+        }
+        return (ascending ? comparison : -comparison) || a.name.localeCompare(b.name, "it") || a.id - b.id;
+      }),
   );
   const history = computed(() => {
     const grouped = new Map<
@@ -137,6 +166,8 @@ export const useProducts = () => {
     category,
     knownOnly,
     order,
+    sortColumns,
+    sortBy,
     selected,
     selectedProduct,
     comparable,
