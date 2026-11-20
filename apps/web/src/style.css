@@ -1182,6 +1182,7 @@ input::placeholder {
   margin-top: 3px;
 }
 .product-image {
+  position: relative;
   display: inline-flex;
   width: 52px;
   height: 58px;
@@ -1194,9 +1195,15 @@ input::placeholder {
   overflow: hidden;
 }
 .product-image img {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
   width: 100%;
   height: 100%;
   object-fit: contain;
+}
+.product-image img.loaded {
+  opacity: 1;
 }
 .editor-dialog .product-research {
   margin: 0 25px 20px;
@@ -1290,6 +1297,49 @@ input::placeholder {
     font-size: 12px;
     font-weight: 600;
   }
+}
+
+/* Generic drawings stay distinct from verified product photography. */
+.product-illustration {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  font-size: 34px;
+  line-height: 1;
+  background: #f5eddf;
+  font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+}
+.illustration-milk, .illustration-water, .illustration-fish, .illustration-frozen {
+  background: #e4f1f7;
+}
+.illustration-vegetables, .illustration-fruit, .illustration-oil, .illustration-cleaning {
+  background: #e9f2dc;
+}
+.illustration-meat, .illustration-wine, .illustration-personal-care {
+  background: #f8e7e4;
+}
+.retailer-image {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 44px;
+  flex: 0 0 64px;
+  padding: 5px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: white;
+}
+.retailer-image img {
+  width: 100%;
+  height: auto;
+}
+.receipt-identity {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 .sort-button {

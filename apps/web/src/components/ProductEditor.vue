@@ -71,7 +71,7 @@ const save = async () => {
       </button>
     </div>
     <div class="product-research">
-      <ProductImage :product-id="product.id" :url="product.image_url" :name="product.name" />
+      <ProductImage :product-id="product.id" :url="product.image_url" :illustration="product.illustration" :category-id="product.category_id" :name="product.name" />
       <div>
         <p>{{ productSearchLabel(product) }}</p>
         <p v-if="product.search_error" class="text-error" role="status">

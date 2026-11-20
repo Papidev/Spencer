@@ -3,6 +3,7 @@ import { Wallet, ReceiptText, ArrowRight } from "lucide-vue-next";
 import { useOverview } from "../useOverview";
 import { useSpending } from "../store";
 import { dateLabel, money } from "../api";
+import RetailerImage from "../components/RetailerImage.vue";
 import Chart from "../components/Chart.vue";
 import ImportReceipts from "../components/ImportReceipts.vue";
 
@@ -174,7 +175,7 @@ const {
           :key="receipt.id"
           class="recent-receipt"
         >
-          <span class="receipt-icon"><ReceiptText :size="20" /></span>
+          <RetailerImage :retailer="receipt.retailer" />
           <div>
             <strong>{{ receipt.retailer }}</strong><small
               >{{ dateLabel(receipt.date) }} ·

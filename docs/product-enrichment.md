@@ -11,7 +11,7 @@ Stato: disegno confermato dall’utente e implementato localmente.
 - Non usare servizi a pagamento, neppure per la ricerca dei prodotti.
 - Usare SearXNG locale per la ricerca web. I limiti e i blocchi dei motori a monte restano applicabili; non è garantita una quota o una velocità di ricerca.
 - È consentita la ricerca online gratuita sui cataloghi e siti pubblici, usando soltanto le parole del prodotto.
-- Quando non emerge un risultato utilizzabile, conservare la descrizione originale e lasciare vuota l’immagine; non inventare dettagli mancanti.
+- Quando non emerge un risultato utilizzabile, conservare la descrizione originale e usare un disegno generico pertinente al prodotto quando manca una foto verificata; non inventare dettagli mancanti.
 - Le correzioni manuali prevalgono sui risultati automatici successivi, salvo richiesta esplicita di nuova ricerca.
 - Dopo ogni importazione, avviare la ricerca per i prodotti nuovi in background senza bloccare l’uso dell’app. Offrire un comando anche per i prodotti già presenti.
 - La categorizzazione indipendente usa Ollama locale sulle descrizioni originali, senza regole su parole chiave né ricerca web. Può assegnare una categoria anche ai prodotti non identificati, senza confermarne l’identità. Elabora in background i prodotti senza categoria e protegge le scelte manuali.
@@ -20,7 +20,7 @@ Stato: disegno confermato dall’utente e implementato localmente.
 - Se Ollama o la fonte online non sono disponibili, mantenere i prodotti in attesa e riprovare al successivo avvio di Spencer. Offrire anche un pulsante per riprovare subito.
 - Mostrare nome riconosciuto e foto nella pagina Prodotti e nel dettaglio degli scontrini, mantenendo visibile la descrizione originale dello scontrino.
 - Nell’editor consentire la correzione di nome, categoria, marca, formato e URL dell’immagine; le correzioni manuali restano protette.
-- Mostrare soltanto foto con confezione di vendita visibile. Il modello locale verifica l’immagine, incluse quelle già nella cache; foto generiche di alimenti, piatti e casi incerti restano nascosti senza eliminare i dettagli del prodotto o l’URL originale.
+- Mostrare soltanto foto con confezione di vendita visibile. Il modello locale verifica l’immagine, incluse quelle già nella cache; foto generiche di alimenti, piatti e casi incerti restano nascosti senza eliminare i dettagli del prodotto o l’URL originale. In questi casi mostrare un disegno generico, chiaramente indicato come tale.
 
 ## Fatti verificati
 
@@ -39,7 +39,7 @@ Stato: disegno confermato dall’utente e implementato localmente.
 
 - Nessun servizio a pagamento o modello cloud.
 - La conferma automatica può essere errata e resta correggibile.
-- Nessun risultato utilizzabile: descrizione originale e immagine vuota. I dettagli assenti non vengono inventati.
+- Nessun risultato utilizzabile: descrizione originale e disegno generico. I dettagli assenti non vengono inventati.
 - SearXNG e il modello locale devono essere in esecuzione per completare nuove ricerche. Blocchi dei motori, pagine non accessibili e foto mancanti possono impedire l’arricchimento.
 
 ## Verifica locale
@@ -51,3 +51,13 @@ Stato: disegno confermato dall’utente e implementato localmente.
 - Confronto con backup locale precedente alla migrazione: scontrini, acquisti, alias e categorie conservati.
 - Test automatici isolati dalla rete esterna coprono conferma automatica, correzioni durante una ricerca, risposte tardive, errori e ripresa, risultati mancanti, rifiuto dei modelli cloud, immagini generiche e formati non documentati. Test UI con MSW coprono modifica dei dettagli e nuova ricerca con/senza sostituzione delle correzioni.
 - La prova è un campione funzionale, non una misura di accuratezza sul catalogo completo. Gli altri prodotti esistenti non sono stati accodati automaticamente.
+
+## Illustrazioni generiche
+
+- Le foto verificate hanno precedenza; in assenza di foto, durante il caricamento o in caso di errore, viene mostrato un disegno pertinente al prodotto.
+- Ollama locale sceglie tra disegni a colori (latte, pane, pasta, banane, agrumi, pesce, detersivi, ecc.), anche per prodotti non identificati sul web. Il disegno usa il font emoji a colori del sistema e non rappresenta marca o confezione specifiche.
+- La scelta viene salvata separatamente da foto, categoria e conferma del prodotto. Non conferma l’identità e non sostituisce i campi corretti manualmente.
+- Durante l’attesa del modello, usare il disegno della categoria già assegnata quando disponibile.
+- Un lavoro indipendente elabora fino a 16 prodotti per richiesta, inclusi quelli già presenti, con al massimo tre tentativi e attesa crescente. I lavori incompleti riprendono al riavvio.
+- Se viene corretto il nome, il disegno viene ricalcolato. Una risposta tardiva non sovrascrive la scelta relativa a una revisione o a un nome diverso.
+- Logo Esselunga conservato localmente dal sito ufficiale; provenienza in `apps/web/public/ASSETS.md`.

@@ -9,6 +9,8 @@ export type Product = {
   pack_size?: string;
   kind?: "unknown" | "fixed" | "variable_weight";
   image_url?: string;
+  illustration?: string;
+  illustration_pending?: boolean;
   source_url?: string;
   confirmation?: "" | "automatic" | "manual";
   manual_fields?: string[];

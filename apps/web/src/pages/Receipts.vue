@@ -10,6 +10,7 @@ import {
 import ImportReceipts from "../components/ImportReceipts.vue";
 import { useSpending } from "../store";
 import { dateLabel, money } from "../api";
+import RetailerImage from "../components/RetailerImage.vue";
 import ProductIdentity from "../components/ProductIdentity.vue";
 
 const { state, purchases, mutate, busy } = useSpending();
@@ -63,13 +64,15 @@ const receiptLines = computed(() =>
                     selected = selected === receipt.id ? null : receipt.id
                   "
                 >
-                  <strong>{{
+                  <span class="receipt-identity">
+                  <RetailerImage v-if="receipt.status === 'imported'" :retailer="receipt.retailer" />
+                  <span><strong>{{
                     receipt.status === "imported"
                       ? receipt.retailer
                       : receipt.filename
                   }}</strong><small>{{
                     receipt.store || "Importazione da controllare"
-                  }}</small>
+                  }}</small></span></span>
                 </button>
               </td>
               <td>{{ dateLabel(receipt.date) }}</td>

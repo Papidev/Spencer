@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session
 
 from spencer.categorization import CategoryWorker
 from spencer.database import Alias, Category, Product, ProductKind, Purchase
+from spencer.illustrations import IllustrationWorker
 
 logger = logging.getLogger(__name__)
 DETAIL_FIELDS = ("name", "brand", "pack_size", "image_url", "category_id", "kind")
@@ -43,8 +44,9 @@ class ProductMatch(BaseModel):
     category_id: int | None
 
 
-class CategoryChoice(BaseModel):
+class ProductClassification(BaseModel):
     category_id: int | None
+    kind: ProductKind
 
 
 class PackagingCheck(BaseModel):
@@ -211,6 +213,8 @@ class ProductResearch:
                                     if "packaged" in schema["properties"]
                                     else 'Esempio struttura: {"category_id":null}.'
                                     if "category_id" in schema["properties"]
+                                    else 'Esempio struttura: {"illustrations":[{"product_id":1,"illustration":"milk"}]}.'
+                                    if "illustrations" in schema["properties"]
                                     else 'Esempio struttura: {"query":"parole da cercare"}.'
                                 )
                             ),
@@ -222,10 +226,10 @@ class ProductResearch:
         response.raise_for_status()
         return str(response.json()["message"]["content"])
 
-    async def classify_category(
+    async def classify_product(
         self, labels: list[str], categories: dict[int, str]
-    ) -> int | None:
-        choice = CategoryChoice.model_validate_json(
+    ) -> tuple[int | None, ProductKind]:
+        choice = ProductClassification.model_validate_json(
             await self.chat(
                 "Assegna una categoria al tipo di prodotto descritto sullo scontrino. "
                 "Non serve identificare marca, variante o formato esatti e non serve una "
@@ -233,14 +237,19 @@ class ProductResearch:
                 "prodotto nel suo insieme, non un singolo ingrediente. Usa solo una categoria "
                 "dalla lista fornita; restituisci category_id=null se le descrizioni sono "
                 "insufficienti o incompatibili. Non confermare l'identità del prodotto. "
+                "Determina anche come viene venduto: variable_weight per prodotti sfusi "
+                "o a peso variabile (es. BANANE senza indicazione di confezione); fixed per "
+                "formati fissi riconoscibili dalla descrizione (es. PASTA 500 G). Un peso "
+                "su carne o formaggio da banco può indicare la quantità pesata, non il "
+                "formato. Usa unknown se non puoi distinguere i due casi. "
                 f"Descrizioni: {json.dumps(labels, ensure_ascii=False)}\n"
                 f"Categorie disponibili: {json.dumps(categories, ensure_ascii=False)}",
-                CategoryChoice.model_json_schema(),
+                ProductClassification.model_json_schema(),
             )
         )
         if choice.category_id is not None and choice.category_id not in categories:
             raise ValueError("Categoria restituita dal modello non valida.")
-        return choice.category_id
+        return choice.category_id, choice.kind
 
     async def packaged_image(self, content: bytes) -> bool:
         return PackagingCheck.model_validate_json(
@@ -441,9 +450,11 @@ class EnrichmentWorker:
         self.research = research
         self.wake = asyncio.Event()
         self.categories = CategoryWorker(engine, research)
+        self.illustrations = IllustrationWorker(engine, research)
 
     def resume(self) -> None:
         self.categories.resume()
+        self.illustrations.resume()
         with Session(self.engine) as session:
             for product in session.scalars(
                 select(Product).where(
@@ -507,8 +518,12 @@ class EnrichmentWorker:
                     if field not in protected:
                         if field == "category_id" and result[field] is None:
                             continue
+                        if field == "kind" and result[field] == "unknown":
+                            continue
                         setattr(product, field, result[field])
-                if product.category_id is not None:
+                if product.category_id is not None and (
+                    product.kind != "unknown" or "kind" in protected
+                ):
                     product.category_status = "done"
                 product.source_url = result["source_url"]
                 product.reviewed = True

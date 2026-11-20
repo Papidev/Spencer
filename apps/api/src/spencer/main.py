@@ -75,18 +75,21 @@ def create_app(directory: Path | None = None, research: ProductResearch | None =
                 session.add_all(Category(name=name) for name in CATEGORIES)
                 session.commit()
         task = None
+        illustration_task = None
         research = research or ProductResearch()
         if os.environ.get("SPENCER_ENRICHMENT_ENABLED", "true").lower() == "true":
             worker = EnrichmentWorker(engine, research)
             worker.resume()
             task = asyncio.create_task(worker.run())
+            illustration_task = asyncio.create_task(worker.illustrations.run())
         try:
             yield
         finally:
-            if task and worker:
-                task.cancel()
-                with suppress(asyncio.CancelledError):
-                    await task
+            for background_task in (task, illustration_task):
+                if background_task:
+                    background_task.cancel()
+                    with suppress(asyncio.CancelledError):
+                        await background_task
             await research.close()
             engine.dispose()
 
@@ -141,6 +144,8 @@ def create_app(directory: Path | None = None, research: ProductResearch | None =
                     "pack_size": product.pack_size,
                     "kind": product.kind,
                     "image_url": product.image_url,
+                    "illustration": product.illustration,
+                    "illustration_pending": not product.illustration and product.illustration_attempts < 3,
                     "source_url": product.source_url,
                     "confirmation": product.confirmation,
                     "manual_fields": json.loads(product.manual_fields),
@@ -286,6 +291,10 @@ def create_app(directory: Path | None = None, research: ProductResearch | None =
             value = getattr(update, field)
             if field == "image_url" and value and not public_url(value):
                 raise HTTPException(422, "Inserisci un URL pubblico http o https per l’immagine.")
+            if field == "name" and (value or "").strip() != product.name:
+                product.illustration = ""
+                product.illustration_attempts = 0
+                product.illustration_after = 0
             setattr(product, field, value if field == "category_id" else (value or "").strip())
             protected.add(field)
         product.manual_fields = json.dumps(sorted(protected))
@@ -304,7 +313,7 @@ def create_app(directory: Path | None = None, research: ProductResearch | None =
                 ),
             )
         ):
-            if product.category_id is None:
+            if product.category_id is None or product.kind == "unknown":
                 product.category_status = "pending"
                 product.category_attempts = 0
                 product.category_after = 0
@@ -371,7 +380,7 @@ def create_app(directory: Path | None = None, research: ProductResearch | None =
             raise HTTPException(404, "Prodotto non trovato.")
         if request.replace_manual:
             product.manual_fields = "[]"
-        if product.category_id is None:
+        if product.category_id is None or product.kind == "unknown":
             product.category_status = "pending"
             product.category_attempts = 0
             product.category_after = 0
