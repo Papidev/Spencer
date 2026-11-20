@@ -14,6 +14,7 @@ onMounted(reload);
 const polling = setInterval(() => {
   if (
     products.value.some((product) =>
+      product.illustration_pending ||
       ["pending", "running", "retry"].includes(product.search_status ?? "") ||
       (product.category_id === null &&
         !product.manual_fields?.includes("category_id") &&

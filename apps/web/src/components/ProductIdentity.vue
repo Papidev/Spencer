@@ -7,7 +7,7 @@ defineProps<{ product: Product; original?: string }>();
 
 <template>
   <span class="product-identity">
-    <ProductImage :product-id="product.id" :url="product.image_url" :name="product.name" />
+    <ProductImage :product-id="product.id" :url="product.image_url" :illustration="product.illustration" :category-id="product.category_id" :name="product.name" />
     <span>
       <strong>{{ product.name }}</strong>
       <small v-if="product.brand || product.pack_size">{{

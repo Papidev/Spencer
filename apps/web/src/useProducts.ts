@@ -1,11 +1,19 @@
 import { computed, ref } from "vue";
 import { useSpending } from "./store";
 import { money, dateLabel } from "./api";
+import type { Product } from "./types";
+
+export const productKindLabels = {
+  fixed: "Formato fisso",
+  variable_weight: "Peso variabile / sfuso",
+  unknown: "Da determinare",
+};
 
 export const useProducts = () => {
   const { state, products, purchases } = useSpending();
   const search = ref("");
   const category = ref("all");
+  const kind = ref<"all" | NonNullable<Product["kind"]>>("all");
   const knownOnly = ref(false);
   const order = ref("spending");
   const sortColumns = [
@@ -39,6 +47,7 @@ export const useProducts = () => {
             .includes(search.value.toLocaleLowerCase("it")) &&
           (category.value === "all" ||
             String(product.category_id) === category.value) &&
+          (kind.value === "all" || (product.kind ?? "unknown") === kind.value) &&
           (!knownOnly.value || Boolean(product.source_url)),
       )
       .map((product) => {
@@ -69,8 +78,7 @@ export const useProducts = () => {
             { sensitivity: "base" },
           );
         } else if (key === "kind") {
-          const labels = { fixed: "Formato fisso", variable_weight: "Peso variabile / sfuso", unknown: "Da determinare" };
-          comparison = labels[a.kind ?? "unknown"].localeCompare(labels[b.kind ?? "unknown"], "it");
+          comparison = productKindLabels[a.kind ?? "unknown"].localeCompare(productKindLabels[b.kind ?? "unknown"], "it");
         } else if (key === "visits") {
           comparison = a.visits - b.visits || a.amount - b.amount;
         } else {
@@ -164,6 +172,7 @@ export const useProducts = () => {
     products,
     search,
     category,
+    kind,
     knownOnly,
     order,
     sortColumns,

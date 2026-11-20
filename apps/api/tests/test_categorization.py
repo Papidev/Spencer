@@ -25,14 +25,14 @@ def classification_client(
         # Category classification must not call a search engine or retrieve product pages.
         assert request.url.path == "/api/chat"
         payload = json.loads(request.content)
-        assert list(payload["format"]["properties"]) == ["category_id"]
+        assert list(payload["format"]["properties"]) == ["category_id", "kind"]
         assert "LATTE TEST 1L" in payload["messages"][1]["content"]
         if on_selection:
             on_selection()
         if unavailable:
             return httpx.Response(503)
         return httpx.Response(
-            200, json={"message": {"content": json.dumps({"category_id": category_id})}}
+            200, json={"message": {"content": json.dumps({"category_id": category_id, "kind": "fixed"})}}
         )
 
     return ProductResearch(httpx.AsyncClient(transport=httpx.MockTransport(respond)))
@@ -56,6 +56,7 @@ def test_ai_category_is_independent_of_exact_identification(
     product = client.get("/api/state").json()["products"][0]
     assert product["category_id"] == category_id
     assert product["category_status"] == ("done" if category_id is not None else "not_found")
+    assert product["kind"] == "fixed"
     assert product["name"] == "LATTE TEST 1L"
     assert product["search_status"] == "not_found"
     assert not product["reviewed"] and not product["confirmation"]
@@ -87,7 +88,8 @@ def test_existing_categories_and_manual_empty_category_are_not_processed(
     with Session(engine) as session:
         products = session.query(Product).order_by(Product.id).all()
         products[0].category_id = 1
-        products[1].manual_fields = '["category_id"]'
+        products[0].kind = "fixed"
+        products[1].manual_fields = '["category_id", "kind"]'
         products[2].category_status = "not_found"
         session.commit()
     worker = CategoryWorker(engine, classification_client(2))
@@ -147,4 +149,31 @@ def test_uncertain_ai_result_is_not_repeated_on_restart(
     restarted.resume()
     assert asyncio.run(restarted.run_once()) is False
     assert client.get("/api/state").json()["products"][0]["category_id"] is None
+    engine.dispose()
+
+
+@pytest.mark.parametrize("manual_edit", [False, True])
+def test_classifies_sales_type_with_existing_category(
+    client: TestClient, receipt_pdf: bytes, tmp_path: Path, manual_edit: bool
+) -> None:
+    client.post("/api/receipts", files={"file": ("test.pdf", receipt_pdf)})
+    engine = database_engine(tmp_path)
+    with Session(engine) as session:
+        product = session.get(Product, 1)
+        assert product is not None
+        product.category_id = 1
+        session.commit()
+    research = classification_client(
+        2,
+        on_selection=(
+            lambda: client.patch("/api/products/1", json={"kind": "variable_weight"})
+        ) if manual_edit else None,
+    )
+    worker = CategoryWorker(engine, research)
+    worker.resume()
+    assert asyncio.run(worker.run_once())
+    product = client.get("/api/state").json()["products"][0]
+    assert product["category_id"] == 1
+    assert product["kind"] == ("variable_weight" if manual_edit else "fixed")
+    assert ("kind" in product["manual_fields"]) == manual_edit
     engine.dispose()

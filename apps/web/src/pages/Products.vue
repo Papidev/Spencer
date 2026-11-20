@@ -3,7 +3,7 @@ import { ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { Search, Pencil, Package } from "lucide-vue-next";
 import { dateLabel, money } from "../api";
-import { useProducts } from "../useProducts";
+import { productKindLabels, useProducts } from "../useProducts";
 import ProductEditor from "../components/ProductEditor.vue";
 import Chart from "../components/Chart.vue";
 import ProductIdentity from "../components/ProductIdentity.vue";
@@ -14,6 +14,7 @@ const {
   products,
   search,
   category,
+  kind,
   knownOnly,
   order,
   sortColumns,
@@ -71,6 +72,11 @@ watch(
         :value="String(item.id)"
       >
         {{ item.name }}
+      </option></select
+    ><select v-model="kind" aria-label="Filtra per tipo di prodotto">
+      <option value="all">Tutti i tipi</option>
+      <option v-for="(label, value) in productKindLabels" :key="value" :value="value">
+        {{ label }}
       </option></select
     ><select v-model="order" aria-label="Ordina prodotti">
       <option value="spending">Spesa maggiore</option>
@@ -181,7 +187,7 @@ watch(
                   ?.name ?? "Non categorizzato"
               }}
             </td>
-            <td data-label="Tipo">{{ product.kind === "fixed" ? "Formato fisso" : product.kind === "variable_weight" ? "Peso variabile / sfuso" : "Da determinare" }}</td>
+            <td data-label="Tipo">{{ productKindLabels[product.kind ?? "unknown"] }}</td>
             <td data-label="Visite con acquisto">{{ product.visits }}</td>
             <td class="align-right number" data-label="Spesa totale">{{ money(product.amount) }}</td>
             <td>
